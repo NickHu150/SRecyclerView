@@ -48,9 +48,7 @@ public abstract class BaseRecyclerViewAdapter<VH extends RecyclerView.ViewHolder
      * @param mItemListener
      */
     public void setOnItemListener(OnItemClickLisener mItemListener) {
-        if (mItemListener != null) {
-            this.mItemListener = mItemListener;
-        }
+        this.mItemListener = mItemListener;
 
     }
 
@@ -72,14 +70,14 @@ public abstract class BaseRecyclerViewAdapter<VH extends RecyclerView.ViewHolder
 
         @Override
         public void onClick(View v) {
-            if (mItemListener != null) {
+            if (mItemListener != null && viewholder.getAdapterPosition() != RecyclerView.NO_POSITION) {
                 mItemListener.onItemClick(viewholder.getAdapterPosition(), viewType, viewholder, v);
             }
         }
 
         @Override
         public boolean onLongClick(View v) {
-            if (mItemListener != null) {
+            if (mItemListener != null && viewholder.getAdapterPosition() != RecyclerView.NO_POSITION) {
                 mItemListener.onItemLongClick(viewholder.getAdapterPosition(), viewType, viewholder, v);
             }
             return false;

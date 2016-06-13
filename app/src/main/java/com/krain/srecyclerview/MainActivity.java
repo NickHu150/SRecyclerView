@@ -12,6 +12,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.krain.srecyclerview.srecyclerview.BaseRecyclerViewAdapter;
+import com.krain.srecyclerview.srecyclerview.OnItemClickLisener;
 import com.krain.srecyclerview.srecyclerview.OnRecyclerStatusChangeListener;
 import com.krain.srecyclerview.srecyclerview.SRecyclerView;
 
@@ -23,6 +24,7 @@ public class MainActivity extends AppCompatActivity implements OnRecyclerStatusC
     List<String> stringList;
     MyAdapter adapter;
     SRecyclerView sRecyclerView;
+    int index;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -30,47 +32,63 @@ public class MainActivity extends AppCompatActivity implements OnRecyclerStatusC
          sRecyclerView = (SRecyclerView) findViewById(R.id.srecyclerview);
         sRecyclerView.setLoadmore(true);
         sRecyclerView.setOnRecyclerChangeListener(this);
+        sRecyclerView.setMaxPage(2);
         stringList = new ArrayList<>();
-        for (int i = 0; i <20 ; i++) {
+        for (int i = 0; i <17 ; i++) {
             stringList.add("测试啊啊啊啊啊啊啊啊");
         }
         adapter = new MyAdapter();
+        adapter.setOnItemListener(new OnItemClickLisener() {
+            @Override
+            public void onItemClick(int position, int viewType, RecyclerView.ViewHolder holder, View v) {
+                stringList.remove(position);
+                sRecyclerView.notifyDataRemove(position);
+            }
+
+            @Override
+            public void onItemLongClick(int position, int viewType, RecyclerView.ViewHolder holder, View v) {
+                sRecyclerView.notifyDataRemove(position);
+            }
+        });
         sRecyclerView.setAdapter(adapter);
     }
 
     @Override
     public void onRefresh() {
-        Snackbar.make(sRecyclerView,"onRefresh",Snackbar.LENGTH_LONG).show();
+        for (int i = 0; i <20 ; i++) {
+            stringList.add("测试");
+        }
+        sRecyclerView.notifyDataSetChanged();
+
     }
 
     @Override
     public void onLoadMore() {
-        Snackbar.make(sRecyclerView,"onLoadMore",Snackbar.LENGTH_LONG).show();
         handler.sendEmptyMessageDelayed(0,1000);
     }
     Handler handler = new Handler(){
         @Override
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
+            index++;
             for (int i = 0; i <10 ; i++) {
                 stringList.add("新增的");
             }
-            sRecyclerView.notifyDataSetChanged();
+            sRecyclerView.notifyDataInsert(adapter.getItemCount()-1,10);
         }
     };
 
     @Override
     public void startRefresh() {
-        Snackbar.make(sRecyclerView,"startRefresh",Snackbar.LENGTH_LONG).show();
     }
 
     @Override
     public void refreshComplete() {
-        Snackbar.make(sRecyclerView,"refreshComplete",Snackbar.LENGTH_LONG).show();
     }
 
 
     class MyAdapter extends BaseRecyclerViewAdapter<MyAdapter.ViewHolder> {
+
 
 
         @Override

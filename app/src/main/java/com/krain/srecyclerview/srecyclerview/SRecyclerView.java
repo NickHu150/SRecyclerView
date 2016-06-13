@@ -10,11 +10,13 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.StaggeredGridLayoutManager;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Scroller;
+import android.widget.TextView;
 
 import com.krain.srecyclerview.R;
 import com.krain.srecyclerview.fruitview.FruitView;
@@ -26,6 +28,7 @@ public class SRecyclerView extends ViewGroup {
     Context context;
     RecyclerView mRecyclerView;
     FruitView mHeaderView;
+    TextView mFootViewTips;//footview的文字显示
     AdapterWrapper mAdapter;
     boolean mIsTop = true;//是否滑动到了最顶部
     RecyclerView.LayoutManager mLayoutManager;
@@ -37,8 +40,14 @@ public class SRecyclerView extends ViewGroup {
     Scroller mScroller;
     int mFristScollerY;//最开始的getscrolly
     boolean mHasFooter;//是否有上拉加载的功能
+    boolean mShowFootVisible;//是否显示FOOTERview在mHasFooter为true的时候生效
     boolean mHasRefresh = true;//是否支持下拉刷新
+    private final int DEFAULT_MIN_PAGEINDEX = 1;//默认最小的页数
+    int mMaxPage = DEFAULT_MIN_PAGEINDEX;//分页的总页数
+    int mCurrentPage = DEFAULT_MIN_PAGEINDEX;//当前的页数，从1开始
     private final int STATUS_NORMAL = 0, STATUS_REFRESH = 1, STATUS_LOAD = 2;
+    private final int MSG_LOAD_COMPLETE = 1, MSG_REFRESH_COMPLETE = 0;//handle的常量
+    private final int DELAY_LOAD_COMPLETE = 1000, DELAY_REFRESH_COMPLETE = 1000;//加载完成延时回收的时间
 
     public SRecyclerView(Context context) {
         super(context);
@@ -56,6 +65,15 @@ public class SRecyclerView extends ViewGroup {
     }
 
     /**
+     * 设置最大页数
+     *
+     * @param maxPage
+     */
+    public void setMaxPage(int maxPage) {
+        this.mMaxPage = maxPage;
+    }
+
+    /**
      * 是否支持上拉加载
      *
      * @param hasLoadmore
@@ -65,17 +83,25 @@ public class SRecyclerView extends ViewGroup {
     }
 
     /**
-     * 是否支持下拉刷新
-     *
-     * @param hasRefresh
+     * 关闭下拉刷新功能
      */
-    public void setRefresh(boolean hasRefresh) {
-        mHasRefresh = hasRefresh;
+    public void disableRefresh() {
+        mHasRefresh = false;
     }
 
     public void setAdapter(BaseRecyclerViewAdapter adapter) {
+        int height = 0;
+        if (mMaxPage == DEFAULT_MIN_PAGEINDEX) {
+            mHasFooter = false;
+        }
         mAdapter = new AdapterWrapper(context, adapter);
         mRecyclerView.setAdapter(mAdapter);
+    }
+
+    private int getViewHeight(View view) {
+        int measure = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        view.measure(measure, measure);
+        return view.getMeasuredHeight();
     }
 
     /**
@@ -100,9 +126,20 @@ public class SRecyclerView extends ViewGroup {
         mRecyclerView.setItemAnimator(animator);
     }
 
-    public void notifyDataSetChanged(){
+    public void notifyDataSetChanged() {
         mStatus = STATUS_NORMAL;//重新set数据代表loadmore结束了，此时恢复成普通状态
         mAdapter.notifyDataSetChanged();
+
+    }
+
+    public void notifyDataInsert(int positionStart, int itemCount) {
+        mStatus = STATUS_NORMAL;//重新set数据代表loadmore结束了，此时恢复成普通状态
+        mAdapter.notifyItemRangeInserted(positionStart, itemCount);
+    }
+
+    public void notifyDataRemove(int position) {
+        mStatus = STATUS_NORMAL;//重新set数据代表loadmore结束了，此时恢复成普通状态
+        mAdapter.notifyItemRemoved(position);
     }
 
     /**
@@ -216,14 +253,19 @@ public class SRecyclerView extends ViewGroup {
         mScroller.startScroll(0, currentY, 0, (mFristScollerY - mHeadviewHeight) - currentY);
         invalidate();
         if (mRecyclerChangeListener != null) mRecyclerChangeListener.onRefresh();
-        handler.sendEmptyMessageDelayed(0, 1000);
+        handler.sendEmptyMessageDelayed(MSG_REFRESH_COMPLETE, DELAY_REFRESH_COMPLETE);
     }
 
     Handler handler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
-            complete();
+            if (msg.what == MSG_LOAD_COMPLETE) {
+                View footview = mAdapter.getFootView();
+                if (footview != null)
+                    mRecyclerView.smoothScrollBy(0, -footview.getMeasuredHeight());
+            } else if (msg.what == MSG_REFRESH_COMPLETE)
+                complete();
         }
     };
 
@@ -232,6 +274,9 @@ public class SRecyclerView extends ViewGroup {
      * header返回原处完全隐藏
      */
     public void complete() {
+        mCurrentPage = DEFAULT_MIN_PAGEINDEX;//完成之后当前的page恢复默认值
+        if (mFootViewTips != null)
+            mFootViewTips.setText(context.getString(R.string.loading));//更改foot提示为正在加载中
         if (mRecyclerChangeListener != null) mRecyclerChangeListener.refreshComplete();
         mStatus = STATUS_NORMAL;
         int currentY = getScrollY();
@@ -284,11 +329,20 @@ public class SRecyclerView extends ViewGroup {
                     mIsTop = true;
                 } else {
                     mIsTop = false;
-                    if (mStatus != STATUS_LOAD && mHasFooter && mLastVisibleItem + 1 == mAdapter.getItemCount()) {
-                        mStatus = STATUS_LOAD;
-                        if (mRecyclerChangeListener != null) {
-                            mRecyclerChangeListener.onLoadMore();
+                    if (mStatus != STATUS_LOAD && mShowFootVisible && mLastVisibleItem + 1 == mAdapter.getItemCount()) {
+                        if (mCurrentPage == mMaxPage) {
+                            //当前页面是最后一页的时候
+                            mFootViewTips = (TextView) mAdapter.getFootView().findViewById(R.id.footer_tips);
+                            mFootViewTips.setText(context.getString(R.string.last_page_tips));
+                            handler.sendEmptyMessageDelayed(MSG_LOAD_COMPLETE, DELAY_LOAD_COMPLETE);
+                        } else {
+                            mStatus = STATUS_LOAD;
+                            if (mRecyclerChangeListener != null) {
+                                mRecyclerChangeListener.onLoadMore();
+                                mCurrentPage++;
+                            }
                         }
+
                     }
                 }
 
@@ -302,6 +356,7 @@ public class SRecyclerView extends ViewGroup {
             if (mLayoutManager instanceof LinearLayoutManager) {
                 mLastVisibleItem = ((LinearLayoutManager) mLayoutManager).findLastVisibleItemPosition();
                 mFirstVisibleItem = ((LinearLayoutManager) mLayoutManager).findFirstCompletelyVisibleItemPosition();
+                setFootviewVisible();
             } else if (mLayoutManager instanceof GridLayoutManager) {
                 mLastVisibleItem = ((GridLayoutManager) mLayoutManager).findLastVisibleItemPosition();
                 mFirstVisibleItem = ((GridLayoutManager) mLayoutManager).findFirstCompletelyVisibleItemPosition();
@@ -315,6 +370,21 @@ public class SRecyclerView extends ViewGroup {
             }
         }
     };
+
+
+    void setFootviewVisible() {
+        //当设置了拥有上拉加载功能但是第一页的条目不足以盛满Recyclerview的时候隐藏footer
+        if (mHasFooter && mFirstVisibleItem == 0) {
+            /**
+             *  这里加上一个mShowFootVisible在上拉加载功能启用的情况下生效，从来控制item数量不足铺满
+             *  recyclerview高度的时刻隐藏footview，在item数量超过view高度的情况下显示
+             */
+            if (mLastVisibleItem + 1 == mAdapter.getItemCount()) {
+                mShowFootVisible = false;
+            } else mShowFootVisible = true;
+            notifyDataSetChanged();
+        }
+    }
 
     private int findMax(int[] positions) {
         int max = positions[0];
@@ -332,6 +402,7 @@ public class SRecyclerView extends ViewGroup {
         private static final int TYPE_FOOTER = 1;
         private RecyclerView.Adapter mAdapter;
         private Context mContext;
+        View footer;
 
         public AdapterWrapper(Context context, RecyclerView.Adapter wrappedAdapter) {
             this.mContext = context;
@@ -346,12 +417,16 @@ public class SRecyclerView extends ViewGroup {
                     holder = mAdapter.onCreateViewHolder(parent, viewType);
                     break;
                 case TYPE_FOOTER:
-                    View footer = LayoutInflater.from(mContext).inflate(R.layout.lib_recyle_footview, null);
+                    footer = LayoutInflater.from(mContext).inflate(R.layout.lib_recyle_footview, null);
                     footer.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
                     holder = new FooterViewHolder(footer);
                     break;
             }
             return holder;
+        }
+
+        public View getFootView() {
+            return footer;
         }
 
         @Override
@@ -363,12 +438,13 @@ public class SRecyclerView extends ViewGroup {
 
         @Override
         public int getItemCount() {
-            return mHasFooter ? mAdapter.getItemCount() + 1 : mAdapter.getItemCount();
+            return mShowFootVisible ? mAdapter.getItemCount() + 1 : mAdapter.getItemCount();
         }
+
 
         @Override
         public int getItemViewType(int position) {
-            if (mHasFooter && position + 1 == getItemCount()) {
+            if (mShowFootVisible && position + 1 == getItemCount()) {
                 return TYPE_FOOTER;
             } else {
                 return TYPE_ITEM;
