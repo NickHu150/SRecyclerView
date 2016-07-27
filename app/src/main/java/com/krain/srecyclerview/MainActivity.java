@@ -2,24 +2,24 @@ package com.krain.srecyclerview;
 
 import android.os.Handler;
 import android.os.Message;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.krain.srecyclerview.srecyclerview.BaseRecyclerViewAdapter;
 import com.krain.srecyclerview.srecyclerview.OnItemClickLisener;
+import com.krain.srecyclerview.srecyclerview.OnItemClickListener;
 import com.krain.srecyclerview.srecyclerview.OnRecyclerStatusChangeListener;
 import com.krain.srecyclerview.srecyclerview.SRecyclerView;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity implements OnRecyclerStatusChangeListener{
+public class MainActivity extends AppCompatActivity implements OnRecyclerStatusChangeListener {
 
     List<String> stringList;
     MyAdapter adapter;
@@ -38,18 +38,14 @@ public class MainActivity extends AppCompatActivity implements OnRecyclerStatusC
             stringList.add("测试啊啊啊啊啊啊啊啊");
         }
         adapter = new MyAdapter();
-        adapter.setOnItemListener(new OnItemClickLisener() {
+        adapter.setOnItemClickListener(new OnItemClickListener() {
             @Override
             public void onItemClick(int position, int viewType, RecyclerView.ViewHolder holder, View v) {
                 stringList.remove(position);
                 sRecyclerView.notifyDataRemove(position);
             }
-
-            @Override
-            public void onItemLongClick(int position, int viewType, RecyclerView.ViewHolder holder, View v) {
-                sRecyclerView.notifyDataRemove(position);
-            }
         });
+
         sRecyclerView.setAdapter(adapter);
     }
 
@@ -111,6 +107,8 @@ public class MainActivity extends AppCompatActivity implements OnRecyclerStatusC
         public int getItemCount() {
             return stringList.size();
         }
+
+
 
         class ViewHolder extends RecyclerView.ViewHolder {
             public TextView textView;

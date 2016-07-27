@@ -14,6 +14,7 @@ import android.view.View;
 import com.krain.srecyclerview.R;
 import com.krain.srecyclerview.UiUtil;
 
+
 /**
  * Created by 胡亚敏 on 2016/3/25.
  */

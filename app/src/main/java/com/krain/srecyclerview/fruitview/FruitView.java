@@ -58,6 +58,7 @@ public class FruitView extends FrameLayout {
                 WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         layoutParams.setMargins(0,MAX_HEIGHT,0,0);
         curveHeadLoadingView.setLayoutParams(layoutParams);
+
     }
 
 
@@ -78,7 +79,7 @@ public class FruitView extends FrameLayout {
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        setMeasuredDimension(curveHeadLoadingView.getMeasuredWidth(), (MAX_HEIGHT + mImageView.getMeasuredHeight()+curveHeadLoadingView.getMeasuredHeight()));
+        setMeasuredDimension(curveHeadLoadingView.getMeasuredWidth(), (MAX_HEIGHT + mImageView.getMeasuredHeight()+curveHeadLoadingView.getMeasuredHeight()));//以下面的最长的view作为view的长度
         loadAnim();
     }
 

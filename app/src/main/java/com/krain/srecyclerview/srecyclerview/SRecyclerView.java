@@ -10,7 +10,6 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.StaggeredGridLayoutManager;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -21,10 +20,12 @@ import android.widget.TextView;
 import com.krain.srecyclerview.R;
 import com.krain.srecyclerview.fruitview.FruitView;
 
+
 /**
  * Created by 胡亚敏 on 2016-5-27.
  */
 public class SRecyclerView extends ViewGroup {
+    public static final int SINGLE_TYPE = -133;//没有多个viewtype情况下的标示符
     Context context;
     RecyclerView mRecyclerView;
     FruitView mHeaderView;
@@ -35,6 +36,7 @@ public class SRecyclerView extends ViewGroup {
     int mLastVisibleItem;
     int mFirstVisibleItem;
     OnRecyclerStatusChangeListener mRecyclerChangeListener;
+    OnScrollListener mOnScrollListener;
     int mStatus;//当前状态
     int mHeadviewHeight;//headview的高度
     Scroller mScroller;
@@ -48,6 +50,8 @@ public class SRecyclerView extends ViewGroup {
     private final int STATUS_NORMAL = 0, STATUS_REFRESH = 1, STATUS_LOAD = 2;
     private final int MSG_LOAD_COMPLETE = 1, MSG_REFRESH_COMPLETE = 0;//handle的常量
     private final int DELAY_LOAD_COMPLETE = 1000, DELAY_REFRESH_COMPLETE = 1000;//加载完成延时回收的时间
+    private final int SCROLL_DURATION = 1200;
+    private final int DEFAULT_INTERCEPT_OFFSET = 40;
 
     public SRecyclerView(Context context) {
         super(context);
@@ -99,7 +103,7 @@ public class SRecyclerView extends ViewGroup {
     }
 
     private int getViewHeight(View view) {
-        int measure = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        int measure = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
         view.measure(measure, measure);
         return view.getMeasuredHeight();
     }
@@ -115,6 +119,10 @@ public class SRecyclerView extends ViewGroup {
 
     public void setOnRecyclerChangeListener(OnRecyclerStatusChangeListener listener) {
         mRecyclerChangeListener = listener;
+    }
+
+    public void setOnScrollListener(OnScrollListener onScrollListener) {
+        this.mOnScrollListener = onScrollListener;
     }
 
     /**
@@ -158,6 +166,8 @@ public class SRecyclerView extends ViewGroup {
         if (mScroller.computeScrollOffset()) {
             scrollTo(mScroller.getCurrX(), mScroller.getCurrY());
             postInvalidate();
+        } else if (getScrollY() == mFristScollerY){
+             mStatus = STATUS_NORMAL;
         }
 
     }
@@ -168,7 +178,7 @@ public class SRecyclerView extends ViewGroup {
      * @param context
      */
     void addChildView(Context context) {
-        ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
+        LayoutParams params = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
         mHeaderView = new FruitView(context);
         mRecyclerView = new RecyclerView(context);
         addView(mHeaderView);
@@ -181,6 +191,7 @@ public class SRecyclerView extends ViewGroup {
         mRecyclerView.setHasFixedSize(true);
         mRecyclerView.setLayoutParams(params);
     }
+
 
     /**
      * 屏蔽Recyclerview的触摸事件（下拉刷新的时候）
@@ -198,7 +209,7 @@ public class SRecyclerView extends ViewGroup {
             case MotionEvent.ACTION_CANCEL:
                 return false;
             case MotionEvent.ACTION_MOVE:
-                if (mHasRefresh && mIsTop && ev.getRawY() > lastY)
+                if (mHasRefresh && mIsTop && ev.getRawY() > lastY + DEFAULT_INTERCEPT_OFFSET)
                     return true;
                 break;
 
@@ -245,12 +256,21 @@ public class SRecyclerView extends ViewGroup {
     }
 
     /**
+     * 是否正在刷新
+     *
+     * @return
+     */
+    public boolean isRefreshing() {
+        return mStatus == STATUS_REFRESH;
+    }
+
+    /**
      * 执行刷新操作,移动到header刚出来的位置
      */
-    void doRefresh() {
+    public void doRefresh() {
         mStatus = STATUS_REFRESH;
         int currentY = getScrollY();
-        mScroller.startScroll(0, currentY, 0, (mFristScollerY - mHeadviewHeight) - currentY);
+        mScroller.startScroll(0, currentY, 0, (mFristScollerY - mHeadviewHeight) - currentY, SCROLL_DURATION);
         invalidate();
         if (mRecyclerChangeListener != null) mRecyclerChangeListener.onRefresh();
         handler.sendEmptyMessageDelayed(MSG_REFRESH_COMPLETE, DELAY_REFRESH_COMPLETE);
@@ -278,9 +298,8 @@ public class SRecyclerView extends ViewGroup {
         if (mFootViewTips != null)
             mFootViewTips.setText(context.getString(R.string.loading));//更改foot提示为正在加载中
         if (mRecyclerChangeListener != null) mRecyclerChangeListener.refreshComplete();
-        mStatus = STATUS_NORMAL;
         int currentY = getScrollY();
-        mScroller.startScroll(0, currentY, 0, mFristScollerY - currentY);
+        mScroller.startScroll(0, currentY, 0, mFristScollerY - currentY, SCROLL_DURATION);
         invalidate();
     }
 
@@ -310,8 +329,20 @@ public class SRecyclerView extends ViewGroup {
             top += child.getMeasuredHeight();
         }
         mHeadviewHeight = getPaddingTop() + mHeaderView.getMeasuredHeight();
-        scrollTo(0, mHeadviewHeight);//移动到header下方以显示recyleview
-        mFristScollerY = getScrollY();
+        /**
+         * 这里加上一个判断可以解决列表控件内部比如Viewpager的page变化的时候调用viewgroup的onlayout方法导致一些的UI问题
+         * 这里加上的条件是当初始化进入onlayout的方法的时候才scrollto到默认位置
+         */
+        if (mFristScollerY == 0) {
+            scrollTo(0, mHeadviewHeight);//移动到header下方以显示recyleview
+            mFristScollerY = getScrollY();
+        }
+
+
+    }
+
+    public RecyclerView.LayoutManager getLayoutManager() {
+        return mLayoutManager;
     }
 
 
@@ -345,10 +376,11 @@ public class SRecyclerView extends ViewGroup {
 
                     }
                 }
-
-
+                if (mOnScrollListener != null)
+                    mOnScrollListener.onScrollStateChanged(recyclerView, newState);
             }
         }
+
 
         @Override
         public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
@@ -368,6 +400,8 @@ public class SRecyclerView extends ViewGroup {
                 mLastVisibleItem = findMax(lastPositions);
                 mFirstVisibleItem = ((StaggeredGridLayoutManager) mLayoutManager).findFirstVisibleItemPositions(lastPositions)[0];
             }
+            if (mOnScrollListener != null)
+                mOnScrollListener.onScrolled(recyclerView, dx, dy);
         }
     };
 
@@ -398,8 +432,7 @@ public class SRecyclerView extends ViewGroup {
 
     private class AdapterWrapper extends RecyclerView.Adapter {
 
-        private static final int TYPE_ITEM = 0;
-        private static final int TYPE_FOOTER = 1;
+        private static final int TYPE_FOOTER = 12138;
         private RecyclerView.Adapter mAdapter;
         private Context mContext;
         View footer;
@@ -413,13 +446,13 @@ public class SRecyclerView extends ViewGroup {
         public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
             RecyclerView.ViewHolder holder = null;
             switch (viewType) {
-                case TYPE_ITEM:
-                    holder = mAdapter.onCreateViewHolder(parent, viewType);
-                    break;
                 case TYPE_FOOTER:
                     footer = LayoutInflater.from(mContext).inflate(R.layout.lib_recyle_footview, null);
                     footer.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
                     holder = new FooterViewHolder(footer);
+                    break;
+                default:
+                    holder = mAdapter.onCreateViewHolder(parent, viewType);
                     break;
             }
             return holder;
@@ -447,7 +480,7 @@ public class SRecyclerView extends ViewGroup {
             if (mShowFootVisible && position + 1 == getItemCount()) {
                 return TYPE_FOOTER;
             } else {
-                return TYPE_ITEM;
+                return mAdapter.getItemViewType(position);
             }
         }
 
